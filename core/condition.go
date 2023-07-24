@@ -401,14 +401,6 @@ func blockNum(result *Result, first, second string) bool {
 	return !(secondI-firstI > deltaThreshold)
 }
 
-// func absInt(number int64) int64 {
-// 	if number < 0 {
-// 		return -number
-// 	} else {
-// 		return number
-// 	}
-// }
-
 // isEqual compares two strings.
 //
 // Supports the "pat" and the "any" functions.
