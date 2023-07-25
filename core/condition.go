@@ -398,7 +398,15 @@ func blockNum(result *Result, first, second string) bool {
 
 	}
 	result.AddError(fmt.Sprintf("rpc: %d, reference: %d, diff: %d", firstI, secondI, secondI-firstI))
-	return !(secondI-firstI > deltaThreshold)
+	return !(absInt(secondI-firstI) > deltaThreshold)
+}
+
+func absInt(number int64) int64 {
+	if number < 0 {
+		return -number
+	} else {
+		return number
+	}
 }
 
 // isEqual compares two strings.
