@@ -397,8 +397,7 @@ func blockNum(result *Result, first, second string) bool {
 		return false
 
 	}
-
-	result.AddError(fmt.Sprintf("rpc: %d, reference: %d", firstI, secondI))
+	result.AddError(fmt.Sprintf("rpc: %d, reference: %d, diff: %d", firstI, secondI, secondI-firstI))
 	return !(absInt(secondI-firstI) > deltaThreshold)
 }
 
