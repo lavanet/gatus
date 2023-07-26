@@ -25,6 +25,7 @@ func queryWebSocket(endpoint *Endpoint, result *Result) {
 		result.AddError("Error dialing WS:" + err.Error())
 		return
 	}
+	defer ws.Close()
 	result.Connected = true
 
 	// Write message
@@ -42,7 +43,4 @@ func queryWebSocket(endpoint *Endpoint, result *Result) {
 	}
 
 	result.Body = msg[:n]
-
-	// Close socket
-	defer ws.Close()
 }
