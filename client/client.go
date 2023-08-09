@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -14,7 +15,11 @@ import (
 
 	"github.com/TwiN/gocache/v2"
 	"github.com/TwiN/whois"
+	"github.com/fullstorydev/grpcurl"
 	"github.com/ishidawataru/sctp"
+	"github.com/jhump/protoreflect/grpcreflect"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	ping "github.com/prometheus-community/pro-bing"
 )
 
@@ -187,4 +192,78 @@ func Ping(address string, config *Config) (bool, time.Duration) {
 // InjectHTTPClient is used to inject a custom HTTP client for testing purposes
 func InjectHTTPClient(httpClient *http.Client) {
 	injectedHTTPClient = httpClient
+}
+
+// GRPC is used to open a gRPC connection and execute a remmote action.
+// Returns:
+// - bool: whether the connection was stablished
+// - []byte: data returned from the remote procedure called
+// - error: if there was an error
+func QueryGRPC(address string, config *Config, grpcConfig *GRPCConfig, body string) (bool, []byte, error) {
+	var opts grpc.DialOption
+	if config.Insecure {
+		opts = grpc.WithTransportCredentials(insecure.NewCredentials())
+	} else {
+		return false, nil, fmt.Errorf("Not implemented yet")
+	}
+
+	// Set up a connection to the server.
+	conn, err := grpc.Dial(address, opts)
+	if err != nil {
+		return false, nil, fmt.Errorf("error opening gRPC connection: %w", err)
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// if verb
+	if len(grpcConfig.Verb) > 0  {
+		client := grpcreflect.NewClientAuto(ctx, conn)
+
+		switch verb := grpcConfig.Verb; verb {
+		case "list":
+			return ListGRPC(ctx, client, grpcConfig.Service)
+		case "describe":
+			return false, nil, fmt.Errorf("Not implemented yet")
+		}
+	} else {
+		// if not verb, send data to execute RPC: grpcurl -d body service
+		return false, nil, fmt.Errorf("Not implemented yet")
+	}
+
+	return false, []byte(""), nil
+}
+
+// List the services of a server or service
+// Returns:
+// - bool: whether the connection was stablished
+// - []byte: byte representation of services separated by "\n"
+// - error: if there was an error
+func ListGRPC(context context.Context, client *grpcreflect.Client, service string) (bool, []byte, error) {
+	ds := grpcurl.DescriptorSourceFromServer(context, client)
+
+	if len(service) == 0 {
+		services, err := grpcurl.ListServices(ds)
+		if err != nil {
+			return false, nil, fmt.Errorf("Error listing services of server: %w", err)
+		}
+		if len(services) == 0 {
+			return true, nil, nil
+		} else {
+			serviceList := []byte(strings.Join(services, "\n"))
+			return true, serviceList, nil
+		}
+	} else {
+		methods, err := grpcurl.ListMethods(ds, service)
+		if err != nil {
+			return false, nil, fmt.Errorf("Error listing methods of service: %w", err)
+		}
+		if len(methods) == 0 {
+			return true, nil, nil
+		} else {
+			methodList := []byte(strings.Join(methods, "\n"))
+			return true, methodList, nil
+		}
+	}
 }

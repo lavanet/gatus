@@ -315,6 +315,36 @@ func TestEndpoint_Type(t *testing.T) {
 		},
 		{
 			args: args{
+				URL: "wss://example.com/",
+			},
+			want: EndpointTypeWS,
+		},
+		{
+			args: args{
+				URL: "ws://example.com/",
+			},
+			want: EndpointTypeWS,
+		},
+		{
+			args: args{
+				URL: "wss://example.com/",
+			},
+			want: EndpointTypeWS,
+		},
+		{
+			args: args{
+				URL: "ws://example.com/",
+			},
+			want: EndpointTypeWS,
+		},
+		{
+			args: args{
+				URL: "grpc://example.com:443",
+			},
+			want: EndpointTypeGRPC,
+		},
+		{
+			args: args{
 				URL: "invalid://example.org",
 			},
 			want: EndpointTypeUNKNOWN,
@@ -423,6 +453,33 @@ func TestEndpoint_ValidateAndSetDefaultsWithClientConfig(t *testing.T) {
 	}
 }
 
+func TestEndpoint_ValidateAndSetDefaultsGrpcWithClientConfig(t *testing.T) {
+	endpoint := Endpoint{
+		Name:       "website-grpc-health",
+		URL:        "grpc://twin.sh:1234",
+		Conditions: []Condition{Condition("[STATUS] == 200")},
+		ClientConfig: &client.Config{
+			Insecure:       true,
+			IgnoreRedirect: false,
+			Timeout:        0,
+		},
+	}
+	endpoint.ValidateAndSetDefaults()
+	if endpoint.ClientConfig == nil {
+		t.Error("client configuration should've been set to the default configuration")
+	} else {
+		if !endpoint.ClientConfig.Insecure {
+			t.Error("endpoint.ClientConfig.Insecure should've been set to true")
+		}
+		if !endpoint.ClientConfig.IgnoreRedirect {
+			t.Error("endpoint.ClientConfig.IgnoreRedirect should've been set to true")
+		}
+		if endpoint.ClientConfig.Timeout != client.GetDefaultConfig().Timeout {
+			t.Error("endpoint.ClientConfig.Timeout should've been set to 10s, because the timeout value entered is not set or invalid")
+		}
+	}
+}
+
 func TestEndpoint_ValidateAndSetDefaultsWithDNS(t *testing.T) {
 	endpoint := &Endpoint{
 		Name: "dns-test",
@@ -486,6 +543,45 @@ func TestEndpoint_ValidateAndSetDefaultsWithSimpleErrors(t *testing.T) {
 				URL:        "https://example.com",
 				Interval:   5 * time.Minute,
 				Conditions: []Condition{Condition("[DOMAIN_EXPIRATION] > 720h")},
+			},
+			expectedErr: nil,
+		},
+		{
+			endpoint: &Endpoint{
+				Name:       "grpc-urls-dont-have-paths",
+				URL:        "grpc://example.com:443/",
+				Interval:   time.Minute,
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+			},
+			expectedErr: ErrInvalidGrpcURLWithPath,
+		},
+		{
+			endpoint: &Endpoint{
+				Name:       "grpc-urls-must-have-ports",
+				URL:        "grpc://example.com",
+				Interval:   time.Minute,
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+			},
+			expectedErr: ErrInvalidGrpcURLWithoutPort,
+		},
+		{
+			endpoint: &Endpoint{
+				Name:       "grpc-urls-must-have-ports-with-numbers",
+				URL:        "grpc://example.com:",
+				Interval:   time.Minute,
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+			},
+			expectedErr: ErrInvalidGrpcURLWithoutPort,
+		},
+		{
+			endpoint: &Endpoint{
+				Name:       "good-grpc-url",
+				URL:        "grpc://example.com:443",
+				Interval:   time.Minute,
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+				GRPC: &GRPC {
+					Verb: "list",
+				},
 			},
 			expectedErr: nil,
 		},

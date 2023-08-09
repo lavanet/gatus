@@ -42,7 +42,8 @@ const (
 	EndpointTypeSTARTTLS EndpointType = "STARTTLS"
 	EndpointTypeTLS      EndpointType = "TLS"
 	EndpointTypeHTTP     EndpointType = "HTTP"
-	EndpointTypeWS       EndpointType = "WS"
+	EndpointTypeWS       EndpointType = "WEBSOCKET"
+	EndpointTypeGRPC     EndpointType = "GRPC"
 	EndpointTypeUNKNOWN  EndpointType = "UNKNOWN"
 )
 
@@ -70,6 +71,12 @@ var (
 	// This is because the free whois service we are using should not be abused, especially considering the fact that
 	// the data takes a while to be updated.
 	ErrInvalidEndpointIntervalForDomainExpirationPlaceholder = errors.New("the minimum interval for an endpoint with a condition using the " + DomainExpirationPlaceholder + " placeholder is 300s (5m)")
+
+	// ErrInvalidGrpcURLWithPath is the error when the gRPC URL contains paths or trailing slashes
+	ErrInvalidGrpcURLWithPath = errors.New("gRPC URLs must not contain paths or trailingh slashes")
+
+	// ErrInvalidGrpcURLWithoutPort is the error when the gRPC URL does not contain the port number
+	ErrInvalidGrpcURLWithoutPort = errors.New("gRPC URLs must contain the port number to connect to")
 )
 
 // Endpoint is the configuration of a monitored
@@ -100,6 +107,9 @@ type Endpoint struct {
 
 	// JsonRPC is whether to wrap the body in as a JSON RPC 2.0 method call. First word becomes method name and the rest becomes parameters
 	JsonRPC bool `yaml:"jsonrpc,omitempty"`
+
+	// gRPC specific configuration: verb (list or describe); service.
+	GRPC *client.GRPCConfig `yaml:"grpc,omitempty"`
 
 	// Headers of the request
 	Headers map[string]string `yaml:"headers,omitempty"`
@@ -155,6 +165,8 @@ func (endpoint Endpoint) Type() EndpointType {
 		return EndpointTypeHTTP
 	case strings.HasPrefix(endpoint.URL, "ws://") || strings.HasPrefix(endpoint.URL, "wss://"):
 		return EndpointTypeWS
+	case strings.HasPrefix(endpoint.URL, "grpc://"):
+		return EndpointTypeGRPC
 	default:
 		return EndpointTypeUNKNOWN
 	}
@@ -245,6 +257,50 @@ func (endpoint *Endpoint) ValidateAndSetDefaults() error {
 	_, err := http.NewRequest(endpoint.Method, endpoint.URL, bytes.NewBuffer([]byte(endpoint.Body)))
 	if err != nil {
 		return err
+	}
+	if endpoint.Type() == EndpointTypeGRPC {
+		url := strings.TrimPrefix(endpoint.URL, "grpc://")
+
+		// gRPC URLs don't have paths neither trailing slashes
+		if strings.ContainsAny(url, "/") {
+			return ErrInvalidGrpcURLWithPath
+		}
+
+		// gRPC URLs must have the port
+		s := strings.SplitAfter(url, ":")
+		if len(s) == 1 {
+			return ErrInvalidGrpcURLWithoutPort
+		}
+		if !strings.ContainsAny(s[1], "1234567890") {
+			return ErrInvalidGrpcURLWithoutPort
+		}
+
+		// gRPC does not handle redirects (302)
+		endpoint.ClientConfig.IgnoreRedirect = true
+
+		// There must be gRPC specific configuration
+		if endpoint.GRPC == nil {
+			return client.ErrGRPCWithoutVerbAndService
+		}
+
+		// If there is a verb, it must be either `list` or `describe`
+		if len(endpoint.GRPC.Verb) > 0 {
+			// If there's a verb, it should be valid
+			if !(endpoint.GRPC.Verb == "list") &&
+				!(endpoint.GRPC.Verb == "describe") {
+				return client.ErrGRPCWithBadVerb
+			}
+		} else {
+			// If there's no verb, there should be a Service/Method
+			if len(endpoint.GRPC.Service) == 0 {
+				return client.ErrGRPCWithoutVerbAndService
+			}
+		}
+		// Body and Verb are mutually exclusive, if one is specified,
+		// the other should be absent
+		if (len(endpoint.Body) > 0) && (len(endpoint.GRPC.Verb) > 0) {
+			return client.ErrGRPCWithVerbAndBody
+		}
 	}
 	return nil
 }
@@ -364,6 +420,16 @@ func (endpoint *Endpoint) call(result *Result) {
 	} else if endpointType == EndpointTypeWS {
 		queryWebSocket(endpoint, result)
 		result.Duration = time.Since(startTime)
+	} else if endpointType == EndpointTypeGRPC {
+		result.Connected, result.Body, err = client.QueryGRPC(strings.TrimPrefix(endpoint.URL, "grpc://"),
+		                                                      endpoint.ClientConfig,
+		                                                      endpoint.GRPC,
+		                                                      endpoint.Body)
+		result.Duration = time.Since(startTime)
+		if err != nil {
+			result.AddError(err.Error())
+			return
+		}
 	} else {
 		response, err = client.GetHTTPClient(endpoint.ClientConfig).Do(request)
 		result.Duration = time.Since(startTime)

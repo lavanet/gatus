@@ -51,3 +51,13 @@ endpoints:
     interval: 1h
     conditions:
       - "[DOMAIN_EXPIRATION] > 720h"
+
+  - name: gRPC endpoint
+    url: "grpc://example.org/"
+    client:
+        insecure: true
+    grpc:
+        verb: 'list'
+        service: 'grpc.reflection.v1alpha.ServerReflection'
+    conditions:
+      - "[BODY] == pat(*grpc.reflection.v1alpha.ServerReflection.*)"

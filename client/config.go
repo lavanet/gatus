@@ -24,6 +24,15 @@ var (
 	ErrInvalidDNSResolverPort    = errors.New("invalid DNS resolver port")
 	ErrInvalidClientOAuth2Config = errors.New("invalid oauth2 configuration: must define all fields for client credentials flow (token-url, client-id, client-secret, scopes)")
 
+	// ErrGRPCWithBadVerb is the error when the verb specified is not valid
+	ErrGRPCWithBadVerb = errors.New("verb must be one of list or describe")
+
+	// ErrGRPCWithoutVerbAndService is the error when there is no verb neither service specified
+	ErrGRPCWithoutVerbAndService = errors.New("there should be a verb and/or service")
+
+	// ErrGRPCWithVerbAndBody is the error when there is a verb and a body
+	ErrGRPCWithVerbAndBody = errors.New("there should be either a verb or body")
+
 	defaultConfig = Config{
 		Insecure:       false,
 		IgnoreRedirect: false,
@@ -74,6 +83,15 @@ type OAuth2Config struct {
 	ClientID     string   `yaml:"client-id"`
 	ClientSecret string   `yaml:"client-secret"`
 	Scopes       []string `yaml:"scopes"` // e.g. ["openid"]
+}
+
+// GRPC is the configuration for a gRPC endpoint
+type GRPCConfig struct {
+	// Verb is the gRPC verb for the query, one of `list` or `describe`
+	Verb string `yaml:"verb"`
+
+	// Service is the gRPC service or method of the request
+	Service string `yaml:"service"`
 }
 
 // ValidateAndSetDefaults validates the client configuration and sets the default values if necessary
