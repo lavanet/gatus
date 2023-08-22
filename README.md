@@ -196,8 +196,8 @@ If you want to test it locally, see [Docker](#docker).
 
 
 ## Configuration
-| Parameter                                       | Description                                                                                                                                 | Default                    |
-|:------------------------------------------------|:--------------------------------------------------------------------------------------------------------------------------------------------|:---------------------------|
+| Parameter                                       | Description                                                                                                                                     | Default                    |
+|:------------------------------------------------|:------------------------------------------------------------------------------------------------------------------------------------------------|:---------------------------|
 | `debug`                                         | Whether to enable debug logs.                                                                                                                   | `false`                    |
 | `metrics`                                       | Whether to expose metrics at /metrics.                                                                                                          | `false`                    |
 | `storage`                                       | [Storage configuration](#storage)                                                                                                               | `{}`                       |
@@ -210,6 +210,8 @@ If you want to test it locally, see [Docker](#docker).
 | `endpoints[].conditions`                        | Conditions used to determine the health of the endpoint. <br />See [Conditions](#conditions).                                                   | `[]`                       |
 | `endpoints[].interval`                          | Duration to wait between every status check.                                                                                                    | `60s`                      |
 | `endpoints[].graphql`                           | Whether to wrap the body in a query param (`{"query":"$body"}`).                                                                                | `false`                    |
+| `endpoints[].grpc.verb`                         | If specified, it should be one of `list` or `describe`.                                                                                         | `""`                       |
+| `endpoints[].grpc.service`                      | The gRPC service or method in the format `foo.bar/baz` to act upon.                                                                             | `""`                       |
 | `endpoints[].body`                              | Request body.                                                                                                                                   | `""`                       |
 | `endpoints[].headers`                           | Request headers.                                                                                                                                | `{}`                       |
 | `endpoints[].dns`                               | Configuration for an endpoint of type DNS. <br />See [Monitoring an endpoint using DNS queries](#monitoring-an-endpoint-using-dns-queries).     | `""`                       |
