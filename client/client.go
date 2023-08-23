@@ -20,7 +20,6 @@ import (
 	"github.com/jhump/protoreflect/grpcreflect"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 	ping "github.com/prometheus-community/pro-bing"
 )
 
@@ -205,43 +204,50 @@ func QueryGRPC(address string, config *Config, grpcConfig *GRPCConfig, body stri
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	var credentialsTLS credentials.TransportCredentials
+	if !config.Insecure {
+		// We only handle the case of basic TLS encryption, using
+		// standard trusted certificates. Support for client side
+		// authentication and custom certificates is not implemented,
+		// but the next lines could be extended for that.
+		tlsConfig, err := grpcurl.ClientTLSConfig(true, "", "", "")
+		if err != nil {
+			return false, nil, fmt.Errorf("error configuring TLS: %w", err)
+		}
+		credentialsTLS = credentials.NewTLS(tlsConfig)
+	}
+
+	var dialOptions []grpc.DialOption
+	// TODO get headers from configuration
+	// TODO set user agent as the same of Gatus
+	dialOptions = append(dialOptions, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(65536))) // TODO this could be configurable
+	dialOptions = append(dialOptions, grpc.WithUserAgent("WOLOLO/666"))
+
+	client, err := grpcurl.BlockingDial(ctx, "tcp", address, credentialsTLS, dialOptions...)
+	if err != nil {
+		return false, nil, fmt.Errorf("Error dialing gRPC server: %w", err)
+	}
+	defer client.Close()
+
+	refclient := grpcreflect.NewClientAuto(ctx, client)
+	defer refclient.Reset()
+	ds := grpcurl.DescriptorSourceFromServer(ctx, refclient)
+
 	// if there's a verb (list or describe)
 	if len(grpcConfig.Verb) > 0  {
-		var opts grpc.DialOption
-		if config.Insecure {
-			opts = grpc.WithTransportCredentials(insecure.NewCredentials())
-		} else {
-			return false, nil, fmt.Errorf("TLS not implemented yet")
-		}
-
-		// Set up a connection to the server
-		conn, err := grpc.Dial(address, opts)
-		if err != nil {
-			return false, nil, fmt.Errorf("error opening gRPC connection: %w", err)
-		}
-		defer conn.Close()
-
-		// Start client
-		client := grpcreflect.NewClientAuto(ctx, conn)
-		defer client.Reset()
-
 		switch verb := grpcConfig.Verb; verb {
 		case "list":
-			return GRPCList(ctx, client, grpcConfig.Service)
-		case "describe":
-			return false, nil, fmt.Errorf("Not implemented yet")
+			return GRPCList(ds, client, grpcConfig.Service)
 		default:
-			return false, nil, fmt.Errorf("This case should not happen due to previous validation")
+			// ValidateAndSetDefaults from core.endpoint should prevent
+			// entering here
+			return false, nil, fmt.Errorf("%s not implemented", verb)
 		}
 		// Could extend here to implement health check protocol, as
-		// requested in https://github.com/TwiN/gatus/issues/157
+		// in https://github.com/TwiN/gatus/issues/157
 	} else {
 		// RPC
-		var opts credentials.TransportCredentials
-		if !config.Insecure {
-			return false, nil, fmt.Errorf("TLS not implemented yet")
-		}
-		return GRPCInvokeRPC(ctx, address, opts, body, grpcConfig.Service)
+		return GRPCInvokeRPC(client, ctx, ds, body, grpcConfig.Service)
 	}
 }
 
@@ -250,9 +256,7 @@ func QueryGRPC(address string, config *Config, grpcConfig *GRPCConfig, body stri
 // - bool: whether the connection was stablished
 // - []byte: byte representation of services separated by "\n"
 // - error: if there was an error
-func GRPCList(context context.Context, client *grpcreflect.Client, service string) (bool, []byte, error) {
-	ds := grpcurl.DescriptorSourceFromServer(context, client)
-
+func GRPCList(ds grpcurl.DescriptorSource, client *grpc.ClientConn, service string) (bool, []byte, error) {
 	if len(service) == 0 {
 		services, err := grpcurl.ListServices(ds)
 		if err != nil {
@@ -283,23 +287,7 @@ func GRPCList(context context.Context, client *grpcreflect.Client, service strin
 // - bool: whether the connection was stablished
 // - []byte: byte representation of services separated by "\n"
 // - error: if there was an error
-func GRPCInvokeRPC(context context.Context, address string, tlsOpts credentials.TransportCredentials, body string, service string) (bool, []byte, error) {
-	var dialOptions []grpc.DialOption
-	// TODO get headers from configuration
-	// TODO set user agent as the same of Gatus
-	dialOptions = append(dialOptions, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(65536))) // TODO this could be configurable
-	dialOptions = append(dialOptions, grpc.WithUserAgent("WOLOLO/666"))
-
-	client, err := grpcurl.BlockingDial(context, "tcp", address, tlsOpts, dialOptions...)
-	if err != nil {
-		return false, nil, fmt.Errorf("Error dialing gRPC server: %w", err)
-	}
-	defer client.Close()
-
-	refclient := grpcreflect.NewClientAuto(context, client)
-	defer refclient.Reset()
-	ds := grpcurl.DescriptorSourceFromServer(context, refclient)
-
+func GRPCInvokeRPC(client *grpc.ClientConn, ctx context.Context, ds grpcurl.DescriptorSource, body string, service string) (bool, []byte, error) {
 	options := grpcurl.FormatOptions{
 		EmitJSONDefaultFields: true,
 		AllowUnknownFields:    true,
@@ -318,11 +306,15 @@ func GRPCInvokeRPC(context context.Context, address string, tlsOpts credentials.
 	handler := &grpcurl.DefaultEventHandler{
 		Out:            buffer,
 		Formatter:      formatter,
-		VerbosityLevel: 0, // zero is the default
+		VerbosityLevel: 0, // Zero is the default. Increasing this value
+		                   // increases the verbosity of the output of
+		                   // the RPC invocation, adding request
+		                   // destination, response header, etc. which
+		                   // messes up parsing the "BODY".
 	}
 
 	var headers []string
-	err = grpcurl.InvokeRPC(context, ds, client, service, headers, handler, rf.Next)
+	err = grpcurl.InvokeRPC(ctx, ds, client, service, headers, handler, rf.Next)
 	if err != nil {
 		return false, nil, fmt.Errorf("Error invoking RPC: %w", err)
 	}
