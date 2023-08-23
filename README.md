@@ -210,7 +210,7 @@ If you want to test it locally, see [Docker](#docker).
 | `endpoints[].conditions`                        | Conditions used to determine the health of the endpoint. <br />See [Conditions](#conditions).                                                   | `[]`                       |
 | `endpoints[].interval`                          | Duration to wait between every status check.                                                                                                    | `60s`                      |
 | `endpoints[].graphql`                           | Whether to wrap the body in a query param (`{"query":"$body"}`).                                                                                | `false`                    |
-| `endpoints[].grpc.verb`                         | If specified, it should be one of `list` or `describe`.                                                                                         | `""`                       |
+| `endpoints[].grpc.verb`                         | gRPC action to execute instead of invoking an RPC, example: `'list'`.                                                                           | `""`                       |
 | `endpoints[].grpc.service`                      | The gRPC service or method in the format `foo.bar/baz` to act upon.                                                                             | `""`                       |
 | `endpoints[].body`                              | Request body.                                                                                                                                   | `""`                       |
 | `endpoints[].headers`                           | Request headers.                                                                                                                                | `{}`                       |
@@ -1583,8 +1583,6 @@ Or to invoke an RPC:
   - name: gRPC - RPC example
     group: paying-customers
     url: grpc://example.com:9090
-    client:
-        insecure: true
     grpc:
         service: 'foo.bar.Service/GetLatestFoo'
     body: '{"user": "123asdf"}'
@@ -1597,6 +1595,7 @@ RPC invocation has some caveats though:
 - The maximum message size received from the server is capped at 65 Kb.
 - As there are no `.proto` files involved in the monitoring, only servers that
   implemente gRPC Reflection can be monitored.
+- Client side authentication via TLS is not implemented.
 
 ### Monitoring an endpoint using ICMP
 By prefixing `endpoints[].url` with `icmp:\\`, you can monitor endpoints at a very basic level using ICMP, or more

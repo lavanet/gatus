@@ -108,7 +108,7 @@ type Endpoint struct {
 	// JsonRPC is whether to wrap the body in as a JSON RPC 2.0 method call. First word becomes method name and the rest becomes parameters
 	JsonRPC bool `yaml:"jsonrpc,omitempty"`
 
-	// gRPC specific configuration: verb (list or describe); service.
+	// gRPC specific configuration: verb; service.
 	GRPC *client.GRPCConfig `yaml:"grpc,omitempty"`
 
 	// Headers of the request

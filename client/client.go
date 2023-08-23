@@ -220,7 +220,7 @@ func QueryGRPC(address string, config *Config, grpcConfig *GRPCConfig, body stri
 	var dialOptions []grpc.DialOption
 	// TODO get headers from configuration
 	// TODO set user agent as the same of Gatus
-	dialOptions = append(dialOptions, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(65536))) // TODO this could be configurable
+	dialOptions = append(dialOptions, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(65536))) // TODO this could be configurable e.g. client.MaxRecvMsgSize
 	dialOptions = append(dialOptions, grpc.WithUserAgent("WOLOLO/666"))
 
 	client, err := grpcurl.BlockingDial(ctx, "tcp", address, credentialsTLS, dialOptions...)
@@ -233,7 +233,7 @@ func QueryGRPC(address string, config *Config, grpcConfig *GRPCConfig, body stri
 	defer refclient.Reset()
 	ds := grpcurl.DescriptorSourceFromServer(ctx, refclient)
 
-	// if there's a verb (list or describe)
+	// if there's a verb (e.g. list)
 	if len(grpcConfig.Verb) > 0  {
 		switch verb := grpcConfig.Verb; verb {
 		case "list":
@@ -244,7 +244,8 @@ func QueryGRPC(address string, config *Config, grpcConfig *GRPCConfig, body stri
 			return false, nil, fmt.Errorf("%s not implemented", verb)
 		}
 		// Could extend here to implement health check protocol, as
-		// in https://github.com/TwiN/gatus/issues/157
+		// in https://github.com/TwiN/gatus/issues/157 or 'describe'
+		// like in grpcurl.
 	} else {
 		// RPC
 		return GRPCInvokeRPC(client, ctx, ds, body, grpcConfig.Service)

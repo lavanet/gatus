@@ -579,7 +579,7 @@ func TestEndpoint_ValidateAndSetDefaultsWithSimpleErrors(t *testing.T) {
 				URL:        "grpc://example.com:443",
 				Interval:   time.Minute,
 				Conditions: []Condition{Condition("[STATUS] == 200")},
-				GRPC: &GRPC {
+				GRPC: &client.GRPCConfig {
 					Verb: "list",
 				},
 			},
@@ -844,5 +844,114 @@ func TestEndpoint_needsToRetrieveIP(t *testing.T) {
 	}
 	if !(&Endpoint{Conditions: []Condition{"[STATUS] == 200", "[IP] == 127.0.0.1"}}).needsToRetrieveIP() {
 		t.Error("expected true, got false")
+	}
+}
+
+func TestEndpoint_GRPCValidateAndSetDefaults(t *testing.T) {
+	scenarios := []struct {
+		endpoint    *Endpoint
+		expectedErr error
+	}{
+		{
+			endpoint: &Endpoint{
+				Name:       "valid-list-request",
+				URL:        "grpc://example.com:443",
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+				Body: "",
+				GRPC: &client.GRPCConfig {
+					Verb: "list",
+					Service: "foo.bar",
+				},
+			},
+			expectedErr: nil,
+		},
+		{
+			endpoint: &Endpoint{
+				Name:       "valid-describe-request",
+				URL:        "grpc://example.com:443",
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+				Body: "",
+				GRPC: &client.GRPCConfig {
+					Verb: "describe",
+					Service: "foo.bar/baz",
+				},
+			},
+			expectedErr: nil,
+		},
+		{
+			endpoint: &Endpoint{
+				Name:       "valid-rpc-call-without-body",
+				URL:        "grpc://example.com:443",
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+				Body: "",
+				GRPC: &client.GRPCConfig {
+					Verb: "",
+					Service: "foo.bar/baz",
+				},
+			},
+			expectedErr: nil,
+		},
+		{
+			endpoint: &Endpoint{
+				Name:       "valid-rpc-call-with-body",
+				URL:        "grpc://example.com:443",
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+				Body: `{"id": "123"}`,
+				GRPC: &client.GRPCConfig {
+					Verb: "",
+					Service: "foo.bar/baz",
+				},
+			},
+			expectedErr: nil,
+		},
+
+		// Invalid cases
+		{
+			endpoint: &Endpoint{
+				Name:       "invalid-grpc-verb",
+				URL:        "grpc://example.com:443",
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+				Body: ``,
+				GRPC: &client.GRPCConfig {
+					Verb: "foo",
+					Service: "foo.bar/baz",
+				},
+			},
+			expectedErr: client.ErrGRPCWithBadVerb,
+		},
+		{
+			endpoint: &Endpoint{
+				Name:       "grpc-verb-and-service-missing",
+				URL:        "grpc://example.com:443",
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+				Body: ``,
+				GRPC: &client.GRPCConfig {
+					Verb: "",
+					Service: "",
+				},
+			},
+			expectedErr: client.ErrGRPCWithoutVerbAndService,
+		},
+		{
+			endpoint: &Endpoint{
+				Name:       "grpc-withverb-and-body",
+				URL:        "grpc://example.com:443",
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+				Body: `{"id": 1}`,
+				GRPC: &client.GRPCConfig {
+					Verb: "list",
+					Service: "foo.bar",
+				},
+			},
+			expectedErr: client.ErrGRPCWithVerbAndBody,
+		},
+	}
+
+	for _, scenario := range scenarios {
+		t.Run(scenario.endpoint.Name, func(t *testing.T) {
+			if err := scenario.endpoint.ValidateAndSetDefaults(); err != scenario.expectedErr {
+				t.Errorf("Expected error %v, got %v", scenario.expectedErr, err)
+			}
+		})
 	}
 }
