@@ -52,8 +52,8 @@ endpoints:
     conditions:
       - "[DOMAIN_EXPIRATION] > 720h"
 
-  - name: gRPC endpoint
-    url: "grpc://example.org/"
+  - name: gRPC - list example
+    url: "grpc://example.org:443"
     client:
         insecure: true
     grpc:
@@ -61,3 +61,14 @@ endpoints:
         service: 'grpc.reflection.v1alpha.ServerReflection'
     conditions:
       - "[BODY] == pat(*grpc.reflection.v1alpha.ServerReflection.*)"
+
+  - name: gRPC - RPC example
+    group: paying-customers
+    url: grpc://example.com:9090
+    client:
+        insecure: true
+    grpc:
+        service: 'foo.bar.Service/GetLatestFoo'
+    body: '{"user": "123asdf"}'
+    conditions:
+      - "[BODY].Foo == 1"

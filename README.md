@@ -1566,8 +1566,8 @@ For example, to list all methods of the
 
 ```yaml
 endpoints:
-  - name: example
-    url: "grpc://foo.com:443"
+  - name: gRPC - list example
+    url: "grpc://example:4430"
     grpc:
         verb: 'list'
         service: 'grpc.reflection.v1alpha.ServerReflection'
@@ -1577,8 +1577,26 @@ endpoints:
       - "[BODY] == pat(*grpc.reflection.v1alpha.ServerReflection.*)"
 ```
 
-Gatus currently only supports inspecting servers that implement gRPC
-Reflection.
+Or to invoke an RPC:
+
+```yaml
+  - name: gRPC - RPC example
+    group: paying-customers
+    url: grpc://example.com:9090
+    client:
+        insecure: true
+    grpc:
+        service: 'foo.bar.Service/GetLatestFoo'
+    body: '{"user": "123asdf"}'
+    conditions:
+      - "[BODY].Foo == 1"
+```
+
+RPC invocation has some caveats though:
+- bidirectional streaming of data is not supported.
+- The maximum message size received from the server is capped at 65 Kb.
+- As there are no `.proto` files involved in the monitoring, only servers that
+  implemente gRPC Reflection can be monitored.
 
 ### Monitoring an endpoint using ICMP
 By prefixing `endpoints[].url` with `icmp:\\`, you can monitor endpoints at a very basic level using ICMP, or more
