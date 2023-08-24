@@ -23,6 +23,8 @@ import (
 	ping "github.com/prometheus-community/pro-bing"
 )
 
+const GatusUserAgent = "Gatus/1.0"
+
 var (
 	// injectedHTTPClient is used for testing purposes
 	injectedHTTPClient *http.Client
@@ -217,10 +219,10 @@ func QueryGRPC(address string, config *Config, grpcConfig *GRPCConfig, body stri
 	}
 
 	var dialOptions []grpc.DialOption
+	// TODO this could be configurable e.g. client.MaxRecvMsgSize
+	dialOptions = append(dialOptions, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(65536)))
 	// TODO get headers from configuration
-	// TODO set user agent as the same of Gatus
-	dialOptions = append(dialOptions, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(65536))) // TODO this could be configurable e.g. client.MaxRecvMsgSize
-	dialOptions = append(dialOptions, grpc.WithUserAgent("WOLOLO/666"))
+	dialOptions = append(dialOptions, grpc.WithUserAgent(GatusUserAgent))
 
 	client, err := grpcurl.BlockingDial(ctx, "tcp", address, credentialsTLS, dialOptions...)
 	if err != nil {

@@ -955,3 +955,9 @@ func TestEndpoint_GRPCValidateAndSetDefaults(t *testing.T) {
 		})
 	}
 }
+
+func Test_consts(t *testing.T) {
+    if GatusUserAgent != client.GatusUserAgent {
+        t.Errorf("Inconsistent UserAgent strings in client and core packages. Expected %s, got %s", GatusUserAgent, client.GatusUserAgent)
+    }
+}
