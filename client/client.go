@@ -262,7 +262,8 @@ func GRPCList(ds grpcurl.DescriptorSource, client *grpc.ClientConn, service stri
 	if len(service) == 0 {
 		services, err := grpcurl.ListServices(ds)
 		if err != nil {
-			return false, nil, fmt.Errorf("Error listing services of server: %w", err)
+			// Unsure if this means succesfull connection or not
+			return true, nil, fmt.Errorf("Error listing services of server: %w", err)
 		}
 		if len(services) == 0 {
 			return true, nil, nil
@@ -318,7 +319,8 @@ func GRPCInvokeRPC(client *grpc.ClientConn, ctx context.Context, ds grpcurl.Desc
 	var headers []string
 	err = grpcurl.InvokeRPC(ctx, ds, client, service, headers, handler, rf.Next)
 	if err != nil {
-		return false, nil, fmt.Errorf("Error invoking RPC: %w", err)
+		// Unsure if this means succesfull connection or not
+		return true, nil, fmt.Errorf("Error invoking RPC: %w", err)
 	}
 
 	return true, []byte(buffer.String()), nil
