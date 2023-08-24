@@ -200,8 +200,7 @@ func InjectHTTPClient(httpClient *http.Client) {
 // - []byte: data returned from the remote procedure called
 // - error: if there was an error
 func QueryGRPC(address string, config *Config, grpcConfig *GRPCConfig, body string) (bool, []byte, error) {
-	// TODO use timeout from configuration here
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), config.Timeout)
 	defer cancel()
 
 	var credentialsTLS credentials.TransportCredentials
