@@ -1,10 +1,12 @@
 package client
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 	"net"
 	"net/http"
 	"net/smtp"
@@ -14,9 +16,15 @@ import (
 
 	"github.com/TwiN/gocache/v2"
 	"github.com/TwiN/whois"
+	"github.com/fullstorydev/grpcurl"
 	"github.com/ishidawataru/sctp"
+	"github.com/jhump/protoreflect/grpcreflect"
 	ping "github.com/prometheus-community/pro-bing"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
+
+const GatusUserAgent = "Gatus/1.0"
 
 var (
 	// injectedHTTPClient is used for testing purposes
@@ -187,4 +195,134 @@ func Ping(address string, config *Config) (bool, time.Duration) {
 // InjectHTTPClient is used to inject a custom HTTP client for testing purposes
 func InjectHTTPClient(httpClient *http.Client) {
 	injectedHTTPClient = httpClient
+}
+
+// GRPC is used to open a gRPC connection and execute a remmote action.
+// Returns:
+// - bool: whether the connection was stablished
+// - []byte: data returned from the remote procedure called
+// - error: if there was an error
+func QueryGRPC(address string, config *Config, grpcConfig *GRPCConfig, body string) (bool, []byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), config.Timeout)
+	defer cancel()
+
+	var credentialsTLS credentials.TransportCredentials
+	if !config.Insecure {
+		// We only handle the case of basic TLS encryption, using
+		// standard trusted certificates. Support for client side
+		// authentication and custom certificates is not implemented,
+		// but the next lines could be extended for that.
+		tlsConfig, err := grpcurl.ClientTLSConfig(true, "", "", "")
+		if err != nil {
+			return false, nil, fmt.Errorf("error configuring TLS: %w", err)
+		}
+		credentialsTLS = credentials.NewTLS(tlsConfig)
+	}
+
+	var dialOptions []grpc.DialOption
+	// TODO this could be configurable e.g. client.MaxRecvMsgSize
+	dialOptions = append(dialOptions, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(65536)))
+	// TODO get headers from configuration
+	dialOptions = append(dialOptions, grpc.WithUserAgent(GatusUserAgent))
+
+	client, err := grpcurl.BlockingDial(ctx, "tcp", address, credentialsTLS, dialOptions...)
+	if err != nil {
+		return false, nil, fmt.Errorf("Error dialing gRPC server: %w", err)
+	}
+	defer client.Close()
+
+	refclient := grpcreflect.NewClient(ctx, grpc_reflection_v1alpha.NewServerReflectionClient(client))
+	defer refclient.Reset()
+	ds := grpcurl.DescriptorSourceFromServer(ctx, refclient)
+
+	// if there's a verb (e.g. list)
+	if len(grpcConfig.Verb) > 0 {
+		switch verb := grpcConfig.Verb; verb {
+		case "list":
+			return GRPCList(ds, client, grpcConfig.Service)
+		default:
+			// ValidateAndSetDefaults from core.endpoint should prevent
+			// entering here
+			return false, nil, fmt.Errorf("%s not implemented", verb)
+		}
+		// Could extend here to implement health check protocol, as
+		// in https://github.com/TwiN/gatus/issues/157 or 'describe'
+		// like in grpcurl.
+	} else {
+		// RPC
+		return GRPCInvokeRPC(client, ctx, ds, body, grpcConfig.Service)
+	}
+}
+
+// List the services of a server or service
+// Returns:
+// - bool: whether the connection was stablished
+// - []byte: byte representation of services separated by "\n"
+// - error: if there was an error
+func GRPCList(ds grpcurl.DescriptorSource, client *grpc.ClientConn, service string) (bool, []byte, error) {
+	if len(service) == 0 {
+		services, err := grpcurl.ListServices(ds)
+		if err != nil {
+			// Unsure if this means succesfull connection or not
+			return true, nil, fmt.Errorf("Error listing services of server: %w", err)
+		}
+		if len(services) == 0 {
+			return true, nil, nil
+		} else {
+			serviceList := []byte(strings.Join(services, "\n"))
+			return true, serviceList, nil
+		}
+	} else {
+		methods, err := grpcurl.ListMethods(ds, service)
+		if err != nil {
+			return false, nil, fmt.Errorf("Error listing methods of service: %w", err)
+		}
+		if len(methods) == 0 {
+			return true, nil, nil
+		} else {
+			methodList := []byte(strings.Join(methods, "\n"))
+			return true, methodList, nil
+		}
+	}
+}
+
+// Invoke an RPC via gRPC
+// Returns:
+// - bool: whether the connection was stablished
+// - []byte: byte representation of services separated by "\n"
+// - error: if there was an error
+func GRPCInvokeRPC(client *grpc.ClientConn, ctx context.Context, ds grpcurl.DescriptorSource, body string, service string) (bool, []byte, error) {
+	options := grpcurl.FormatOptions{
+		EmitJSONDefaultFields: true,
+		AllowUnknownFields:    true,
+		IncludeTextSeparator:  true,
+	}
+
+	// Data to send to server
+	data := strings.NewReader(body)
+
+	rf, formatter, err := grpcurl.RequestParserAndFormatter(grpcurl.Format("json"), ds, data, options)
+	if err != nil {
+		return false, nil, fmt.Errorf("Error: %w", err)
+	}
+
+	buffer := new(strings.Builder)
+	handler := &grpcurl.DefaultEventHandler{
+		Out:            buffer,
+		Formatter:      formatter,
+		VerbosityLevel: 0, // Zero is the default. Increasing this value
+		// increases the verbosity of the output of
+		// the RPC invocation, adding request
+		// destination, response header, etc. which
+		// messes up parsing the "BODY".
+	}
+
+	var headers []string
+	err = grpcurl.InvokeRPC(ctx, ds, client, service, headers, handler, rf.Next)
+	if err != nil {
+		// Unsure if this means succesfull connection or not
+		return true, nil, fmt.Errorf("Error invoking RPC: %w", err)
+	}
+
+	return true, []byte(buffer.String()), nil
 }

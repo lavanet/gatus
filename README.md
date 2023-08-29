@@ -88,6 +88,7 @@ Have any feedback or questions? [Create a discussion](https://github.com/TwiN/ga
   - [Monitoring a UDP endpoint](#monitoring-a-udp-endpoint)
   - [Monitoring a SCTP endpoint](#monitoring-a-sctp-endpoint)
   - [Monitoring a WebSocket endpoint](#monitoring-a-websocket-endpoint)
+  - [Monitoring a gRPC endpoint](#monitoring-a-grpc-endpoint)
   - [Monitoring an endpoint using ICMP](#monitoring-an-endpoint-using-icmp)
   - [Monitoring an endpoint using DNS queries](#monitoring-an-endpoint-using-dns-queries)
   - [Monitoring an endpoint using STARTTLS](#monitoring-an-endpoint-using-starttls)
@@ -195,8 +196,8 @@ If you want to test it locally, see [Docker](#docker).
 
 
 ## Configuration
-| Parameter                                       | Description                                                                                                                                 | Default                    |
-|:------------------------------------------------|:--------------------------------------------------------------------------------------------------------------------------------------------|:---------------------------|
+| Parameter                                       | Description                                                                                                                                     | Default                    |
+|:------------------------------------------------|:------------------------------------------------------------------------------------------------------------------------------------------------|:---------------------------|
 | `debug`                                         | Whether to enable debug logs.                                                                                                                   | `false`                    |
 | `metrics`                                       | Whether to expose metrics at /metrics.                                                                                                          | `false`                    |
 | `storage`                                       | [Storage configuration](#storage)                                                                                                               | `{}`                       |
@@ -209,6 +210,8 @@ If you want to test it locally, see [Docker](#docker).
 | `endpoints[].conditions`                        | Conditions used to determine the health of the endpoint. <br />See [Conditions](#conditions).                                                   | `[]`                       |
 | `endpoints[].interval`                          | Duration to wait between every status check.                                                                                                    | `60s`                      |
 | `endpoints[].graphql`                           | Whether to wrap the body in a query param (`{"query":"$body"}`).                                                                                | `false`                    |
+| `endpoints[].grpc.verb`                         | gRPC action to execute instead of invoking an RPC, example: `'list'`.                                                                           | `""`                       |
+| `endpoints[].grpc.service`                      | The gRPC service or method in the format `foo.bar/baz` to act upon.                                                                             | `""`                       |
 | `endpoints[].body`                              | Request body.                                                                                                                                   | `""`                       |
 | `endpoints[].headers`                           | Request headers.                                                                                                                                | `{}`                       |
 | `endpoints[].dns`                               | Configuration for an endpoint of type DNS. <br />See [Monitoring an endpoint using DNS queries](#monitoring-an-endpoint-using-dns-queries).     | `""`                       |
@@ -352,6 +355,7 @@ the client used to send the request.
 
 > 📝 Some of these parameters are ignored based on the type of endpoint. For instance, there's no certificate involved
 in ICMP requests (ping), therefore, setting `client.insecure` to `true` for an endpoint of that type will not do anything.
+`client.ignore-redirect` is ignored for gRPC.
 
 This default configuration is as follows:
 ```yaml
@@ -1552,6 +1556,46 @@ body in a JSON RPC 2.0 method call, in which the first word becomes method name
 and the rest becomes parameters. For example, if the `body` is set to `status`
 and `jsonrpc` is set to `true`, Gatus will send the following as the WebSocket
 message: `{{"jsonrpc":"2.0","method":"status","params":[],"id":1}}`.
+
+### Monitoring a gRPC endpoint
+By prefixing `endpoints[].url` with `grpc://`, you can monitor gRPC endpoints
+at a very basic level.
+
+For example, to list all methods of the
+`grpc.reflection.v1alpha.ServerReflection` service:
+
+```yaml
+endpoints:
+  - name: gRPC - list example
+    url: "grpc://example:4430"
+    grpc:
+        verb: 'list'
+        service: 'grpc.reflection.v1alpha.ServerReflection'
+    client:
+        insecure: true
+    conditions:
+      - "[BODY] == pat(*grpc.reflection.v1alpha.ServerReflection.*)"
+```
+
+Or to invoke an RPC:
+
+```yaml
+  - name: gRPC - RPC example
+    group: paying-customers
+    url: grpc://example.com:9090
+    grpc:
+        service: 'foo.bar.Service/GetLatestFoo'
+    body: '{"user": "123asdf"}'
+    conditions:
+      - "[BODY].Foo == 1"
+```
+
+RPC invocation has some caveats though:
+- bidirectional streaming of data is not supported.
+- The maximum message size received from the server is capped at 65 Kb.
+- As there are no `.proto` files involved in the monitoring, only servers that
+  implemente gRPC Reflection can be monitored.
+- Client side authentication via TLS is not implemented.
 
 ### Monitoring an endpoint using ICMP
 By prefixing `endpoints[].url` with `icmp:\\`, you can monitor endpoints at a very basic level using ICMP, or more

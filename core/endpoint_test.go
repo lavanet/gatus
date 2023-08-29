@@ -315,6 +315,36 @@ func TestEndpoint_Type(t *testing.T) {
 		},
 		{
 			args: args{
+				URL: "wss://example.com/",
+			},
+			want: EndpointTypeWS,
+		},
+		{
+			args: args{
+				URL: "ws://example.com/",
+			},
+			want: EndpointTypeWS,
+		},
+		{
+			args: args{
+				URL: "wss://example.com/",
+			},
+			want: EndpointTypeWS,
+		},
+		{
+			args: args{
+				URL: "ws://example.com/",
+			},
+			want: EndpointTypeWS,
+		},
+		{
+			args: args{
+				URL: "grpc://example.com:443",
+			},
+			want: EndpointTypeGRPC,
+		},
+		{
+			args: args{
 				URL: "invalid://example.org",
 			},
 			want: EndpointTypeUNKNOWN,
@@ -423,6 +453,33 @@ func TestEndpoint_ValidateAndSetDefaultsWithClientConfig(t *testing.T) {
 	}
 }
 
+func TestEndpoint_ValidateAndSetDefaultsGrpcWithClientConfig(t *testing.T) {
+	endpoint := Endpoint{
+		Name:       "website-grpc-health",
+		URL:        "grpc://twin.sh:1234",
+		Conditions: []Condition{Condition("[STATUS] == 200")},
+		ClientConfig: &client.Config{
+			Insecure:       true,
+			IgnoreRedirect: false,
+			Timeout:        0,
+		},
+	}
+	endpoint.ValidateAndSetDefaults()
+	if endpoint.ClientConfig == nil {
+		t.Error("client configuration should've been set to the default configuration")
+	} else {
+		if !endpoint.ClientConfig.Insecure {
+			t.Error("endpoint.ClientConfig.Insecure should've been set to true")
+		}
+		if !endpoint.ClientConfig.IgnoreRedirect {
+			t.Error("endpoint.ClientConfig.IgnoreRedirect should've been set to true")
+		}
+		if endpoint.ClientConfig.Timeout != client.GetDefaultConfig().Timeout {
+			t.Error("endpoint.ClientConfig.Timeout should've been set to 10s, because the timeout value entered is not set or invalid")
+		}
+	}
+}
+
 func TestEndpoint_ValidateAndSetDefaultsWithDNS(t *testing.T) {
 	endpoint := &Endpoint{
 		Name: "dns-test",
@@ -486,6 +543,45 @@ func TestEndpoint_ValidateAndSetDefaultsWithSimpleErrors(t *testing.T) {
 				URL:        "https://example.com",
 				Interval:   5 * time.Minute,
 				Conditions: []Condition{Condition("[DOMAIN_EXPIRATION] > 720h")},
+			},
+			expectedErr: nil,
+		},
+		{
+			endpoint: &Endpoint{
+				Name:       "grpc-urls-dont-have-paths",
+				URL:        "grpc://example.com:443/",
+				Interval:   time.Minute,
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+			},
+			expectedErr: ErrInvalidGrpcURLWithPath,
+		},
+		{
+			endpoint: &Endpoint{
+				Name:       "grpc-urls-must-have-ports",
+				URL:        "grpc://example.com",
+				Interval:   time.Minute,
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+			},
+			expectedErr: ErrInvalidGrpcURLWithoutPort,
+		},
+		{
+			endpoint: &Endpoint{
+				Name:       "grpc-urls-must-have-ports-with-numbers",
+				URL:        "grpc://example.com:",
+				Interval:   time.Minute,
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+			},
+			expectedErr: ErrInvalidGrpcURLWithoutPort,
+		},
+		{
+			endpoint: &Endpoint{
+				Name:       "good-grpc-url",
+				URL:        "grpc://example.com:443",
+				Interval:   time.Minute,
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+				GRPC: &client.GRPCConfig {
+					Verb: "list",
+				},
 			},
 			expectedErr: nil,
 		},
@@ -749,4 +845,119 @@ func TestEndpoint_needsToRetrieveIP(t *testing.T) {
 	if !(&Endpoint{Conditions: []Condition{"[STATUS] == 200", "[IP] == 127.0.0.1"}}).needsToRetrieveIP() {
 		t.Error("expected true, got false")
 	}
+}
+
+func TestEndpoint_GRPCValidateAndSetDefaults(t *testing.T) {
+	scenarios := []struct {
+		endpoint    *Endpoint
+		expectedErr error
+	}{
+		{
+			endpoint: &Endpoint{
+				Name:       "valid-list-request",
+				URL:        "grpc://example.com:443",
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+				Body: "",
+				GRPC: &client.GRPCConfig {
+					Verb: "list",
+					Service: "foo.bar",
+				},
+			},
+			expectedErr: nil,
+		},
+		{
+			endpoint: &Endpoint{
+				Name:       "valid-describe-request",
+				URL:        "grpc://example.com:443",
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+				Body: "",
+				GRPC: &client.GRPCConfig {
+					Verb: "describe",
+					Service: "foo.bar/baz",
+				},
+			},
+			expectedErr: nil,
+		},
+		{
+			endpoint: &Endpoint{
+				Name:       "valid-rpc-call-without-body",
+				URL:        "grpc://example.com:443",
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+				Body: "",
+				GRPC: &client.GRPCConfig {
+					Verb: "",
+					Service: "foo.bar/baz",
+				},
+			},
+			expectedErr: nil,
+		},
+		{
+			endpoint: &Endpoint{
+				Name:       "valid-rpc-call-with-body",
+				URL:        "grpc://example.com:443",
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+				Body: `{"id": "123"}`,
+				GRPC: &client.GRPCConfig {
+					Verb: "",
+					Service: "foo.bar/baz",
+				},
+			},
+			expectedErr: nil,
+		},
+
+		// Invalid cases
+		{
+			endpoint: &Endpoint{
+				Name:       "invalid-grpc-verb",
+				URL:        "grpc://example.com:443",
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+				Body: ``,
+				GRPC: &client.GRPCConfig {
+					Verb: "foo",
+					Service: "foo.bar/baz",
+				},
+			},
+			expectedErr: client.ErrGRPCWithBadVerb,
+		},
+		{
+			endpoint: &Endpoint{
+				Name:       "grpc-verb-and-service-missing",
+				URL:        "grpc://example.com:443",
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+				Body: ``,
+				GRPC: &client.GRPCConfig {
+					Verb: "",
+					Service: "",
+				},
+			},
+			expectedErr: client.ErrGRPCWithoutVerbAndService,
+		},
+		{
+			endpoint: &Endpoint{
+				Name:       "grpc-withverb-and-body",
+				URL:        "grpc://example.com:443",
+				Conditions: []Condition{Condition("[STATUS] == 200")},
+				Body: `{"id": 1}`,
+				GRPC: &client.GRPCConfig {
+					Verb: "list",
+					Service: "foo.bar",
+				},
+			},
+			expectedErr: client.ErrGRPCWithVerbAndBody,
+		},
+	}
+
+	for _, scenario := range scenarios {
+		t.Run(scenario.endpoint.Name, func(t *testing.T) {
+			if err := scenario.endpoint.ValidateAndSetDefaults(); err != scenario.expectedErr {
+				t.Errorf("Expected error %v, got %v", scenario.expectedErr, err)
+			}
+		})
+	}
+}
+
+func Test_consts(t *testing.T) {
+    if GatusUserAgent != client.GatusUserAgent {
+        t.Errorf("Inconsistent UserAgent strings in client and core packages. Expected %s, got %s", GatusUserAgent, client.GatusUserAgent)
+    }
 }
