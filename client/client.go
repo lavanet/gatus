@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 	"net"
 	"net/http"
 	"net/smtp"
@@ -18,9 +19,9 @@ import (
 	"github.com/fullstorydev/grpcurl"
 	"github.com/ishidawataru/sctp"
 	"github.com/jhump/protoreflect/grpcreflect"
+	ping "github.com/prometheus-community/pro-bing"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	ping "github.com/prometheus-community/pro-bing"
 )
 
 const GatusUserAgent = "Gatus/1.0"
@@ -230,12 +231,12 @@ func QueryGRPC(address string, config *Config, grpcConfig *GRPCConfig, body stri
 	}
 	defer client.Close()
 
-	refclient := grpcreflect.NewClientAuto(ctx, client)
+	refclient := grpcreflect.NewClient(ctx, grpc_reflection_v1alpha.NewServerReflectionClient(client))
 	defer refclient.Reset()
 	ds := grpcurl.DescriptorSourceFromServer(ctx, refclient)
 
 	// if there's a verb (e.g. list)
-	if len(grpcConfig.Verb) > 0  {
+	if len(grpcConfig.Verb) > 0 {
 		switch verb := grpcConfig.Verb; verb {
 		case "list":
 			return GRPCList(ds, client, grpcConfig.Service)
@@ -310,10 +311,10 @@ func GRPCInvokeRPC(client *grpc.ClientConn, ctx context.Context, ds grpcurl.Desc
 		Out:            buffer,
 		Formatter:      formatter,
 		VerbosityLevel: 0, // Zero is the default. Increasing this value
-		                   // increases the verbosity of the output of
-		                   // the RPC invocation, adding request
-		                   // destination, response header, etc. which
-		                   // messes up parsing the "BODY".
+		// increases the verbosity of the output of
+		// the RPC invocation, adding request
+		// destination, response header, etc. which
+		// messes up parsing the "BODY".
 	}
 
 	var headers []string
