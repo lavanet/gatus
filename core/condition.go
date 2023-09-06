@@ -183,7 +183,7 @@ func (c Condition) hasIPPlaceholder() bool {
 
 func decodeHex(hex interface{}) (int64, error) {
 	hexStr := fmt.Sprintf("%v", hex)
-	value, err := strconv.ParseInt(hexStr[2:], 16, 64)
+	value, err := strconv.ParseInt(hexStr, 0, 64)
 	if err != nil {
 		return 0, err
 	}
@@ -205,9 +205,9 @@ type cosmosBlock struct {
 func ethBlockNum(result *Result, compareRpcs []string, first string) (int64, int64, bool) {
 	var firstI, secondI int64
 
-	firstI, err := decodeHex(first)
+	firstI, err := strconv.ParseInt(first, 0, 64)
 	if err != nil {
-		result.AddError(err.Error())
+		result.AddError("Error parsing input: " + err.Error())
 		return 0, 0, false
 	}
 
@@ -242,7 +242,7 @@ func ethBlockNum(result *Result, compareRpcs []string, first string) (int64, int
 
 func cosmosBlockNum(result *Result, compareRpcs []string, first string) (int64, int64, bool) {
 	var firstI, secondI int64
-	firstI, err := strconv.ParseInt(first, 10, 64)
+	firstI, err := strconv.ParseInt(first, 0, 64)
 	if err != nil {
 		result.AddError(err.Error())
 		return 0, 0, false
@@ -260,7 +260,7 @@ func cosmosBlockNum(result *Result, compareRpcs []string, first string) (int64, 
 			continue
 		}
 
-		secondI, err = strconv.ParseInt(res.Block.Header.Height, 10, 64)
+		secondI, err = strconv.ParseInt(res.Block.Header.Height, 0, 64)
 		if err != nil {
 			continue
 		}
@@ -544,7 +544,7 @@ func sanitizeAndResolveNumerical(list []string, result *Result) (parameters []st
 		if duration, err := time.ParseDuration(element); duration != 0 && err == nil {
 			// If the string is a duration, convert it to milliseconds
 			resolvedNumericalParameters = append(resolvedNumericalParameters, duration.Milliseconds())
-		} else if number, err := strconv.ParseInt(element, 10, 64); err != nil {
+		} else if number, err := strconv.ParseInt(element, 0, 64); err != nil {
 			// It's not an int, so we'll check if it's a float
 			if f, err := strconv.ParseFloat(element, 64); err == nil {
 				// It's a float, but we'll convert it to an int. We're losing precision here, but it's better than
