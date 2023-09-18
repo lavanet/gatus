@@ -221,7 +221,7 @@ func QueryGRPC(address string, config *Config, grpcConfig *GRPCConfig, body stri
 
 	var dialOptions []grpc.DialOption
 	// TODO this could be configurable e.g. client.MaxRecvMsgSize
-	dialOptions = append(dialOptions, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(65536)))
+	dialOptions = append(dialOptions, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(256*1024)))
 	// TODO get headers from configuration
 	dialOptions = append(dialOptions, grpc.WithUserAgent(GatusUserAgent))
 
