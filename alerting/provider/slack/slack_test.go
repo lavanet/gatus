@@ -145,6 +145,7 @@ func TestAlertProvider_buildRequestBody(t *testing.T) {
 		Endpoint     core.Endpoint
 		Alert        alert.Alert
 		Resolved     bool
+		ResultErrors []string
 		ExpectedBody string
 	}{
 		{
@@ -153,13 +154,24 @@ func TestAlertProvider_buildRequestBody(t *testing.T) {
 			Endpoint:     core.Endpoint{Name: "name"},
 			Alert:        alert.Alert{Description: &firstDescription, SuccessThreshold: 5, FailureThreshold: 3},
 			Resolved:     false,
+			ResultErrors: []string{},
 			ExpectedBody: "{\"text\":\"\",\"attachments\":[{\"title\":\":helmet_with_white_cross: Gatus\",\"text\":\"An alert for *name* has been triggered due to having failed 3 time(s) in a row:\\n\\u003e description-1\",\"short\":false,\"color\":\"#DD0000\",\"fields\":[{\"title\":\"Condition results\",\"value\":\":x: - `[CONNECTED] == true`\\n:x: - `[STATUS] == 200`\\n\",\"short\":false}]}]}",
+		},
+		{
+			Name:         "with-error-msg",
+			Provider:     AlertProvider{},
+			Endpoint:     core.Endpoint{Name: "name"},
+			Alert:        alert.Alert{Description: &firstDescription, SuccessThreshold: 5, FailureThreshold: 3},
+			ResultErrors: []string{"foo", "bar"},
+			Resolved:     false,
+			ExpectedBody: "{\"text\":\"\",\"attachments\":[{\"title\":\":helmet_with_white_cross: Gatus\",\"text\":\"An alert for *name* has been triggered due to having failed 3 time(s) in a row:\\n\\u003e description-1\\n*Error*:\\n\\u003e foo; bar\",\"short\":false,\"color\":\"#DD0000\",\"fields\":[{\"title\":\"Condition results\",\"value\":\":x: - `[CONNECTED] == true`\\n:x: - `[STATUS] == 200`\\n\",\"short\":false}]}]}",
 		},
 		{
 			Name:         "triggered-with-group",
 			Provider:     AlertProvider{},
 			Endpoint:     core.Endpoint{Name: "name", Group: "group"},
 			Alert:        alert.Alert{Description: &firstDescription, SuccessThreshold: 5, FailureThreshold: 3},
+			ResultErrors: []string{},
 			Resolved:     false,
 			ExpectedBody: "{\"text\":\"\",\"attachments\":[{\"title\":\":helmet_with_white_cross: Gatus\",\"text\":\"An alert for *group/name* has been triggered due to having failed 3 time(s) in a row:\\n\\u003e description-1\",\"short\":false,\"color\":\"#DD0000\",\"fields\":[{\"title\":\"Condition results\",\"value\":\":x: - `[CONNECTED] == true`\\n:x: - `[STATUS] == 200`\\n\",\"short\":false}]}]}",
 		},
@@ -168,6 +180,7 @@ func TestAlertProvider_buildRequestBody(t *testing.T) {
 			Provider:     AlertProvider{},
 			Endpoint:     core.Endpoint{Name: "name"},
 			Alert:        alert.Alert{Description: &secondDescription, SuccessThreshold: 5, FailureThreshold: 3},
+			ResultErrors: []string{},
 			Resolved:     true,
 			ExpectedBody: "{\"text\":\"\",\"attachments\":[{\"title\":\":helmet_with_white_cross: Gatus\",\"text\":\"An alert for *name* has been resolved after passing successfully 5 time(s) in a row:\\n\\u003e description-2\",\"short\":false,\"color\":\"#36A64F\",\"fields\":[{\"title\":\"Condition results\",\"value\":\":white_check_mark: - `[CONNECTED] == true`\\n:white_check_mark: - `[STATUS] == 200`\\n\",\"short\":false}]}]}",
 		},
@@ -176,6 +189,7 @@ func TestAlertProvider_buildRequestBody(t *testing.T) {
 			Provider:     AlertProvider{},
 			Endpoint:     core.Endpoint{Name: "name", Group: "group"},
 			Alert:        alert.Alert{Description: &secondDescription, SuccessThreshold: 5, FailureThreshold: 3},
+			ResultErrors: []string{},
 			Resolved:     true,
 			ExpectedBody: "{\"text\":\"\",\"attachments\":[{\"title\":\":helmet_with_white_cross: Gatus\",\"text\":\"An alert for *group/name* has been resolved after passing successfully 5 time(s) in a row:\\n\\u003e description-2\",\"short\":false,\"color\":\"#36A64F\",\"fields\":[{\"title\":\"Condition results\",\"value\":\":white_check_mark: - `[CONNECTED] == true`\\n:white_check_mark: - `[STATUS] == 200`\\n\",\"short\":false}]}]}",
 		},
@@ -190,6 +204,7 @@ func TestAlertProvider_buildRequestBody(t *testing.T) {
 						{Condition: "[CONNECTED] == true", Success: scenario.Resolved},
 						{Condition: "[STATUS] == 200", Success: scenario.Resolved},
 					},
+					Errors: scenario.ResultErrors,
 				},
 				scenario.Resolved,
 			)
