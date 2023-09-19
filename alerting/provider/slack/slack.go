@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/TwiN/gatus/v5/alerting/alert"
 	"github.com/TwiN/gatus/v5/client"
@@ -103,12 +104,17 @@ func (provider *AlertProvider) buildRequestBody(endpoint *core.Endpoint, alert *
 	if alertDescription := alert.GetDescription(); len(alertDescription) > 0 {
 		description = ":\n> " + alertDescription
 	}
+	var errorMsg string
+	if len(result.Errors) > 0 {
+		errorMsg = "\n*Error*:\n> " + strings.Join(result.Errors, "; ")
+	}
+
 	body, _ := json.Marshal(Body{
 		Text: "",
 		Attachments: []Attachment{
 			{
 				Title: ":helmet_with_white_cross: Gatus",
-				Text:  message + description,
+				Text:  message + description + errorMsg,
 				Short: false,
 				Color: color,
 				Fields: []Field{

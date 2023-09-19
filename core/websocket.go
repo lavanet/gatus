@@ -7,7 +7,7 @@ import (
 func queryWebSocket(endpoint *Endpoint, result *Result) {
 	const (
 		Origin             = "http://localhost/"
-		MaximumMessageSize = 1024 // in bytes
+		MaximumMessageSize = websocket.DefaultMaxPayloadBytes
 	)
 		
 	url := endpoint.URL
@@ -26,6 +26,8 @@ func queryWebSocket(endpoint *Endpoint, result *Result) {
 		return
 	}
 	defer ws.Close()
+	ws.MaxPayloadBytes = MaximumMessageSize
+
 	result.Connected = true
 
 	// Write message
